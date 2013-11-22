@@ -162,11 +162,11 @@ private:
 	double wieTauTraj = 1.0;
 	// volumes similarity threshold
 	double htTauMatch;
-	double wieHauMatch = 13.5;
+	double wieTauMatch = 13.5;
 	// volume search window size
 	unsigned htNg = 19;
 	unsigned wieNg = 27;
 	// Number of volumes in group
 	unsigned htM = 32;
-	unsigned vieM = 8;
+	unsigned wieM = 8;
 };

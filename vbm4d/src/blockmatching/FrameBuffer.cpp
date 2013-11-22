@@ -173,17 +173,6 @@ void FrameBuffer::rotateFrames()
 	}
 }
 
-Block FrameBuffer::getBlock(unsigned x, unsigned y, int dt)
-{
-	if (dt == 0) {
-		return Block(x, y, settings.getHtBlockSize(), curFrame);
-	} else if (dt > 0) {
-		return Block(x, y, settings.getHtBlockSize(), nextFrames.at(dt - 1));
-	} else {
-		return Block(x, y, settings.getHtBlockSize(), prevFrames.at(-dt - 1));
-	}
-}
-
 cv::Mat FrameBuffer::readFrame() {
 	cv::Mat res;
 	video >> res;

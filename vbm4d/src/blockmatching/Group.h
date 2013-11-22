@@ -5,12 +5,12 @@
 class Group
 {
 public:
-	Group(const Volume& vol);
+	Group(std::shared_ptr<Volume> vol);
 
-	//void tryAddVol(const Volume& vol);
+	void tryAddVol(std::shared_ptr<Volume> vol);
 	void finish();
 
 private:
 	const Volume& refVol;
-	//std::vector<std::pair<double, const Volume&>> vols;
+	std::vector<std::shared_ptr<Volume>> vols;
 };
