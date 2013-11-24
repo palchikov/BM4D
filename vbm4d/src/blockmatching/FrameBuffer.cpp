@@ -3,7 +3,7 @@
 
 #include "FrameBuffer.h"
 
-FrameBuffer::FrameBuffer(cv::VideoCapture& video, Settings& settings)
+FrameBuffer::FrameBuffer(cv::VideoCapture& video, const BmSettings& settings)
 : video(video)
 , settings(settings)
 , prevFrames()
@@ -14,7 +14,7 @@ FrameBuffer::FrameBuffer(cv::VideoCapture& video, Settings& settings)
 {
 	curFrame = readFrame();
 
-	for (unsigned i = 0; i < settings.getHtExtent(); ++i) {
+	for (unsigned i = 0; i < settings.getExtent(); ++i) {
 		cv::Mat frame = readFrame();
 		if (frame.empty()) break;
 
@@ -24,16 +24,16 @@ FrameBuffer::FrameBuffer(cv::VideoCapture& video, Settings& settings)
 
 unsigned FrameBuffer::volArrWidth()
 {
-	unsigned res = (frameWidth - settings.getHtBlockSize()) / settings.getHtNStep();
-	unsigned rem = (frameWidth - settings.getHtBlockSize()) % settings.getHtNStep();
+	unsigned res = (frameWidth - settings.getBlockSize()) / settings.getNStep();
+	unsigned rem = (frameWidth - settings.getBlockSize()) % settings.getNStep();
 
 	return rem == 0 ? res : res + 1;
 }
 
 unsigned FrameBuffer::volArrHeight()
 {
-	unsigned res = (frameHeight - settings.getHtBlockSize()) / settings.getHtNStep();
-	unsigned rem = (frameHeight - settings.getHtBlockSize()) % settings.getHtNStep();
+	unsigned res = (frameHeight - settings.getBlockSize()) / settings.getNStep();
+	unsigned rem = (frameHeight - settings.getBlockSize()) % settings.getNStep();
 
 	return rem == 0 ? res : res + 1;
 }
@@ -55,15 +55,15 @@ void FrameBuffer::nextFrame()
 void FrameBuffer::constructVolumes()
 {
 	for (unsigned i = 0; i < volumes.size(); ++i) {
-		unsigned y = i * settings.getHtNStep();
+		unsigned y = i * settings.getNStep();
 		if (i == volumes.size() - 1) {
-			y = frameHeight - settings.getHtBlockSize();
+			y = frameHeight - settings.getBlockSize();
 		}
 
 		for (unsigned j = 0; j < volumes[0].size(); ++j) {
-			unsigned x = j * settings.getHtNStep();
+			unsigned x = j * settings.getNStep();
 			if (j == volumes[0].size() - 1) {
-				x = frameWidth - settings.getHtBlockSize();
+				x = frameWidth - settings.getBlockSize();
 			}
 
 			volumes[i][j] = constructVolume(x, y);
@@ -73,7 +73,7 @@ void FrameBuffer::constructVolumes()
 
 std::shared_ptr<Volume> FrameBuffer::constructVolume(unsigned x, unsigned y)
 {
-	auto refBlock = std::make_shared<Block>(x, y, settings.getHtBlockSize(), curFrame);
+	auto refBlock = std::make_shared<Block>(x, y, settings.getBlockSize(), curFrame);
 	auto res = std::make_shared<Volume>(refBlock);
 
 	int vx = 0;
@@ -112,20 +112,20 @@ std::shared_ptr<Volume> FrameBuffer::constructVolume(unsigned x, unsigned y)
 std::shared_ptr<Block> FrameBuffer::findNextBlock(const cv::Mat& frame, std::shared_ptr<Block> ref, int vx, int vy)
 {
 	// search window
-	double xc = settings.getHtGammaP() * vx + ref->getX();
-	double yc = settings.getHtGammaP() * vy + ref->getY();
-	double sigmaw = settings.getHtSigmaW();
-	double Npr = settings.getHtNs() *
-	             (1 - settings.getHtGammaW() * exp(
+	double xc = settings.getGammaP() * vx + ref->getX();
+	double yc = settings.getGammaP() * vy + ref->getY();
+	double sigmaw = settings.getSigmaW();
+	double Npr = settings.getNs() *
+	             (1 - settings.getGammaW() * exp(
 		     -(vx * vx + vy * vy) / 2 / sigmaw / sigmaw)) / 2;
 
 	unsigned xl = static_cast<unsigned>(round(std::max(0.0, xc - Npr)));
 	unsigned yl = static_cast<unsigned>(round(std::max(0.0, yc - Npr)));
-	unsigned xh = static_cast<unsigned>(round(std::min<double>(frameWidth - settings.getHtBlockSize(), xc + Npr)));
-	unsigned yh = static_cast<unsigned>(round(std::min<double>(frameHeight - settings.getHtBlockSize(), yc + Npr)));
+	unsigned xh = static_cast<unsigned>(round(std::min<double>(frameWidth - settings.getBlockSize(), xc + Npr)));
+	unsigned yh = static_cast<unsigned>(round(std::min<double>(frameHeight - settings.getBlockSize(), yc + Npr)));
 
 	std::shared_ptr<Block> res;
-	double min = settings.getHtTauTraj();
+	double min = settings.getTauTraj();
 
 	for (unsigned y = yl; y <= yh; ++y) {
 		for (unsigned x = xl; x <= xh; ++x) {
@@ -133,10 +133,10 @@ std::shared_ptr<Block> FrameBuffer::findNextBlock(const cv::Mat& frame, std::sha
 			int dy = ref->getY() - y;
 			double dist = sqrt(dx * dx + dy * dy);
 
-			auto tmp = std::make_shared<Block>(x, y, settings.getHtBlockSize(), frame);
+			auto tmp = std::make_shared<Block>(x, y, settings.getBlockSize(), frame);
 			
 			double deltab = ref->normSqrDiff(*tmp) +
-			                settings.getHtGammaD() * dist;
+			                settings.getGammaD() * dist;
 
 			if (deltab < min) {
 				min = deltab;
@@ -152,7 +152,7 @@ std::shared_ptr<Block> FrameBuffer::findNextBlock(const cv::Mat& frame, std::sha
 // (should be moved instead of copied)
 void FrameBuffer::rotateFrames()
 {
-	if (prevFrames.size() == settings.getHtExtent()) {
+	if (prevFrames.size() == settings.getExtent()) {
 		prevFrames.pop_back();
 	}
 

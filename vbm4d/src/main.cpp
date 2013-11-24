@@ -17,7 +17,7 @@ int main(int argc, char** argv)
 			return 1;
 		}
 
-		FrameBuffer frames(videoCapture, settings);
+		FrameBuffer frames(videoCapture, settings.getHtBmSettings());
 		while (frames.hasFrame()) {
 			cv::Mat frame = frames.getCurFrame();
 			cv::imshow("slonik", frame);

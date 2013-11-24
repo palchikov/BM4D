@@ -12,7 +12,7 @@
 class FrameBuffer
 {
 public:
-	FrameBuffer(cv::VideoCapture& video, Settings& settings);
+	FrameBuffer(cv::VideoCapture& video, const BmSettings& settings);
 
 	void nextFrame();
 	bool hasFrame();
@@ -36,7 +36,7 @@ private:
 	std::shared_ptr<Block> findNextBlock(const cv::Mat& frame, std::shared_ptr<Block> ref, int vx, int vy);
 
 	cv::VideoCapture& video;
-	Settings& settings;
+	const BmSettings& settings;
 
 	cv::Mat curFrame;
 	std::deque<cv::Mat> prevFrames;
