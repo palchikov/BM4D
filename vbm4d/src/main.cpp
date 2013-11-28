@@ -22,7 +22,6 @@ int main(int argc, char** argv)
 			cv::Mat frame = frames.getCurFrame();
 			cv::imshow("slonik", frame);
 			frames.nextFrame();
-			//frames.displayVol();
 
 			char c = cv::waitKey(1);
 			if (c == 27) break;

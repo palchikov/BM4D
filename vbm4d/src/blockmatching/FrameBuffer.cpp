@@ -6,8 +6,8 @@
 FrameBuffer::FrameBuffer(cv::VideoCapture& video, const BmSettings& settings)
 : video(video)
 , settings(settings)
-, prevFrames()
-, nextFrames()
+, frameBuffer()
+, curFrameIndex(0)
 , frameWidth(video.get(CV_CAP_PROP_FRAME_WIDTH))
 , frameHeight(video.get(CV_CAP_PROP_FRAME_HEIGHT))
 , indexSets(frameHeight - settings.getBlockSize() + 1,
@@ -15,35 +15,22 @@ FrameBuffer::FrameBuffer(cv::VideoCapture& video, const BmSettings& settings)
             std::vector<std::pair<unsigned, unsigned>>(2 * settings.getExtent() + 1,
             std::pair<unsigned, unsigned>(-1, -1))))
 {
-	curFrame = readFrame();
+	cv::Mat frame = readFrame();
+	if (!frame.empty()) {
+		frameBuffer.push_back(frame);
 
-	for (unsigned i = 0; i < settings.getExtent(); ++i) {
-		cv::Mat frame = readFrame();
-		if (frame.empty()) break;
+		for (unsigned i = 0; i < settings.getExtent(); ++i) {
+			frame = readFrame();
+			if (frame.empty()) break;
 
-		nextFrames.push_back(frame);
+			frameBuffer.push_back(frame);
+		}
 	}
-}
-
-unsigned FrameBuffer::volArrWidth()
-{
-	unsigned res = (frameWidth - settings.getBlockSize()) / settings.getNStep();
-	unsigned rem = (frameWidth - settings.getBlockSize()) % settings.getNStep();
-
-	return rem == 0 ? res : res + 1;
-}
-
-unsigned FrameBuffer::volArrHeight()
-{
-	unsigned res = (frameHeight - settings.getBlockSize()) / settings.getNStep();
-	unsigned rem = (frameHeight - settings.getBlockSize()) % settings.getNStep();
-
-	return rem == 0 ? res : res + 1;
 }
 
 bool FrameBuffer::hasFrame()
 {
-	return !curFrame.empty();
+	return curFrameIndex < frameBuffer.size();
 }
 
 void FrameBuffer::nextFrame()
@@ -51,7 +38,7 @@ void FrameBuffer::nextFrame()
 	// construct volumes for current frame
 	constructVolumes();
 
-	// read next frame from video stream
+	// read the next frame from video stream
 	rotateFrames();
 }
 
@@ -86,17 +73,16 @@ void FrameBuffer::constructVolume(unsigned x, unsigned y)
 	unsigned cy = y;
 	int vx = 0;
 	int vy = 0;
-	auto& frame = curFrame;
-	for (unsigned i = 0; i < nextFrames.size(); ++i) {
-		auto& nextFrame = nextFrames[i];
+	for (unsigned i = curFrameIndex + 1; i < frameBuffer.size(); ++i) {
+		auto& frame = frameBuffer[i - 1];
+		auto& nextFrame = frameBuffer[i];
 		auto nextBlock = findNextBlock(frame, nextFrame, cx, cy, vx, vy);
 		if (nextBlock.first != (unsigned)-1 && nextBlock.second != (unsigned)-1) {
-			indexSets[y][x][h + i + 1] = nextBlock;
+			indexSets[y][x][h - curFrameIndex + i] = nextBlock;
 			vx = nextBlock.first - cx;
 			vy = nextBlock.second - cy;
 			cx = nextBlock.first;
 			cy = nextBlock.second;
-			frame = nextFrame;
 		} else {
 			break;
 		}
@@ -106,17 +92,16 @@ void FrameBuffer::constructVolume(unsigned x, unsigned y)
 	cy = y;
 	vx = 0;
 	vy = 0;
-	frame = curFrame;
-	for (unsigned i = 0; i < prevFrames.size(); ++i) {
-		auto& nextFrame = prevFrames[i];
+	for (unsigned i = curFrameIndex; i != 0; --i) {
+		auto& frame = frameBuffer[i];
+		auto& nextFrame = frameBuffer[i - 1];
 		auto nextBlock = findNextBlock(frame, nextFrame, cx, cy, vx, vy);
 		if (nextBlock.first != (unsigned)-1 && nextBlock.second != (unsigned)-1) {
-			indexSets[y][x][h - i - 1] = nextBlock;
+			indexSets[y][x][h - curFrameIndex + i - 1] = nextBlock;
 			vx = nextBlock.first - cx;
 			vy = nextBlock.second - cy;
 			cx = nextBlock.first;
 			cy = nextBlock.second;
-			frame = nextFrame;
 		} else {
 			break;
 		}
@@ -167,28 +152,17 @@ std::pair<unsigned, unsigned> FrameBuffer::findNextBlock(const cv::Mat& frame, c
 	return std::make_pair(xres, yres);
 }
 
-// TODO: optimize and remove redundant copying of curFrame into prevFrames
-// (should be moved instead of copied)
 void FrameBuffer::rotateFrames()
 {
-	if (prevFrames.size() == settings.getExtent()) {
-		prevFrames.pop_back();
-	}
-
-	if (!curFrame.empty()) {
-		prevFrames.push_front(curFrame);
-	}
-
-	if (!nextFrames.empty()) {
-		std::swap(curFrame, nextFrames.front());
-		nextFrames.pop_front();
-
-		cv::Mat frame = readFrame();
-		if (!frame.empty()) {
-			nextFrames.push_back(frame);
-		}
+	if (frameBuffer.size() == 2 * settings.getExtent() + 1) {
+		frameBuffer.pop_front();
 	} else {
-		curFrame.release();
+		++curFrameIndex;
+	}
+
+	cv::Mat frame = readFrame();
+	if (!frame.empty()) {
+		frameBuffer.push_back(frame);
 	}
 }
 

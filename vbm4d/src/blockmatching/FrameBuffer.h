@@ -17,17 +17,11 @@ public:
 	void nextFrame();
 	bool hasFrame();
 	cv::Mat& getCurFrame() { // for testing
-		return curFrame;
+		return frameBuffer[curFrameIndex];
 	}
 	
-//	void displayVol() { // for testing
-//		volumes[20][0]->display();
-//	}
-
 private:
 	cv::Mat readFrame();
-	unsigned volArrWidth();
-	unsigned volArrHeight();
 
 	void rotateFrames();
 
@@ -38,9 +32,8 @@ private:
 	cv::VideoCapture& video;
 	const BmSettings& settings;
 
-	cv::Mat curFrame;
-	std::deque<cv::Mat> prevFrames;
-	std::deque<cv::Mat> nextFrames;
+	std::deque<cv::Mat> frameBuffer;
+	unsigned curFrameIndex;
 	unsigned frameWidth;
 	unsigned frameHeight;
 	
