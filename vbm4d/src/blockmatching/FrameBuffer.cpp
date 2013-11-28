@@ -10,7 +10,10 @@ FrameBuffer::FrameBuffer(cv::VideoCapture& video, const BmSettings& settings)
 , nextFrames()
 , frameWidth(video.get(CV_CAP_PROP_FRAME_WIDTH))
 , frameHeight(video.get(CV_CAP_PROP_FRAME_HEIGHT))
-, volumes(volArrHeight(), std::vector<std::shared_ptr<Volume>>(volArrWidth()))
+, indexSets(frameHeight - settings.getBlockSize() + 1,
+            std::vector<std::vector<std::pair<unsigned, unsigned>>>(frameWidth - settings.getBlockSize() + 1,
+            std::vector<std::pair<unsigned, unsigned>>(2 * settings.getExtent() + 1,
+            std::pair<unsigned, unsigned>(-1, -1))))
 {
 	curFrame = readFrame();
 
@@ -54,98 +57,114 @@ void FrameBuffer::nextFrame()
 
 void FrameBuffer::constructVolumes()
 {
-	for (unsigned i = 0; i < volumes.size(); ++i) {
-		unsigned y = i * settings.getNStep();
-		if (i == volumes.size() - 1) {
-			y = frameHeight - settings.getBlockSize();
-		}
-
-		for (unsigned j = 0; j < volumes[0].size(); ++j) {
-			unsigned x = j * settings.getNStep();
-			if (j == volumes[0].size() - 1) {
-				x = frameWidth - settings.getBlockSize();
+	// clear data from prev frame
+	for (auto& row : indexSets) {
+		for (auto& col : row) {
+			for (auto& block : col) {
+				block.first = -1;
+				block.second = -1;
 			}
+		}
+	}
 
-			volumes[i][j] = constructVolume(x, y);
+	auto rows = indexSets.size();
+	auto cols = indexSets[0].size();
+	for (unsigned y = 0; y < rows; ++y) {
+		for (unsigned x = 0; x < cols; ++x) {
+			constructVolume(x, y);
 		}
 	}
 }
 
-std::shared_ptr<Volume> FrameBuffer::constructVolume(unsigned x, unsigned y)
+void FrameBuffer::constructVolume(unsigned x, unsigned y)
 {
-	auto refBlock = std::make_shared<Block>(x, y, settings.getBlockSize(), curFrame);
-	auto res = std::make_shared<Volume>(refBlock);
+	auto h = settings.getExtent();
+	indexSets[y][x][h].first = x;
+	indexSets[y][x][h].second = y;
 
+	unsigned cx = x;
+	unsigned cy = y;
 	int vx = 0;
 	int vy = 0;
-	auto current = refBlock;
+	auto& frame = curFrame;
 	for (unsigned i = 0; i < nextFrames.size(); ++i) {
-		auto next = findNextBlock(nextFrames.at(i), current, vx, vy);
-		if (next) {
-			res->addForward(next);
-			vx = next->getX() - current->getX();
-			vy = next->getY() - current->getY();
-			current = next;
+		auto& nextFrame = nextFrames[i];
+		auto nextBlock = findNextBlock(frame, nextFrame, cx, cy, vx, vy);
+		if (nextBlock.first != (unsigned)-1 && nextBlock.second != (unsigned)-1) {
+			indexSets[y][x][h + i + 1] = nextBlock;
+			vx = nextBlock.first - cx;
+			vy = nextBlock.second - cy;
+			cx = nextBlock.first;
+			cy = nextBlock.second;
+			frame = nextFrame;
 		} else {
 			break;
 		}
 	}
 
+	cx = x;
+	cy = y;
 	vx = 0;
 	vy = 0;
-	current = refBlock;
+	frame = curFrame;
 	for (unsigned i = 0; i < prevFrames.size(); ++i) {
-		auto next = findNextBlock(prevFrames.at(i), current, vx, vy);
-		if (next) {
-			res->addBackward(next);
-			vx = next->getX() - current->getX();
-			vy = next->getY() - current->getY();
-			current = next;
+		auto& nextFrame = prevFrames[i];
+		auto nextBlock = findNextBlock(frame, nextFrame, cx, cy, vx, vy);
+		if (nextBlock.first != (unsigned)-1 && nextBlock.second != (unsigned)-1) {
+			indexSets[y][x][h - i - 1] = nextBlock;
+			vx = nextBlock.first - cx;
+			vy = nextBlock.second - cy;
+			cx = nextBlock.first;
+			cy = nextBlock.second;
+			frame = nextFrame;
 		} else {
 			break;
 		}
 	}
-
-	return res;
 }
 
-std::shared_ptr<Block> FrameBuffer::findNextBlock(const cv::Mat& frame, std::shared_ptr<Block> ref, int vx, int vy)
+std::pair<unsigned, unsigned> FrameBuffer::findNextBlock(const cv::Mat& frame, const cv::Mat& nextFrame, unsigned refx, unsigned refy, int vx, int vy)
 {
 	// search window
-	double xc = settings.getGammaP() * vx + ref->getX();
-	double yc = settings.getGammaP() * vy + ref->getY();
+	double xc = refx + settings.getGammaP() * vx;
+	double yc = refy + settings.getGammaP() * vy;
 	double sigmaw = settings.getSigmaW();
 	double Npr = settings.getNs() *
 	             (1 - settings.getGammaW() * exp(
 		     -(vx * vx + vy * vy) / 2 / sigmaw / sigmaw)) / 2;
 
-	unsigned xl = static_cast<unsigned>(round(std::max(0.0, xc - Npr)));
-	unsigned yl = static_cast<unsigned>(round(std::max(0.0, yc - Npr)));
-	unsigned xh = static_cast<unsigned>(round(std::min<double>(frameWidth - settings.getBlockSize(), xc + Npr)));
-	unsigned yh = static_cast<unsigned>(round(std::min<double>(frameHeight - settings.getBlockSize(), yc + Npr)));
+	auto xl = static_cast<unsigned>(round(std::max(0.0, xc - Npr / 2)));
+	auto yl = static_cast<unsigned>(round(std::max(0.0, yc - Npr / 2)));
+	auto xh = static_cast<unsigned>(round(std::min<double>(frameWidth - settings.getBlockSize(), xc + Npr / 2)));
+	auto yh = static_cast<unsigned>(round(std::min<double>(frameHeight - settings.getBlockSize(), yc + Npr / 2)));
 
-	std::shared_ptr<Block> res;
-	double min = settings.getTauTraj();
+	auto N = settings.getBlockSize();
+	cv::Mat block(frame, cv::Rect(refx, refy, N, N));
+
+	unsigned xres = -1;
+	unsigned yres = -1;
+	auto min = settings.getTauTraj();
 
 	for (unsigned y = yl; y <= yh; ++y) {
 		for (unsigned x = xl; x <= xh; ++x) {
-			int dx = ref->getX() - x;
-			int dy = ref->getY() - y;
+			int dx = refx - x;
+			int dy = refy - y;
 			double dist = sqrt(dx * dx + dy * dy);
 
-			auto tmp = std::make_shared<Block>(x, y, settings.getBlockSize(), frame);
-			
-			double deltab = ref->normSqrDiff(*tmp) +
+			cv::Mat nextBlock(nextFrame, cv::Rect(x, y, N, N));
+			double norm = cv::norm(block, nextBlock, cv::NORM_L2);
+			double deltab = norm * norm / N / N +
 			                settings.getGammaD() * dist;
 
 			if (deltab < min) {
 				min = deltab;
-				res = tmp;
+				xres = x;
+				yres = y;
 			}
 		}
 	}
 
-	return res;
+	return std::make_pair(xres, yres);
 }
 
 // TODO: optimize and remove redundant copying of curFrame into prevFrames

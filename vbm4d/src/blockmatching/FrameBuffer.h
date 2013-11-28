@@ -20,9 +20,9 @@ public:
 		return curFrame;
 	}
 	
-	void displayVol() { // for testing
-		volumes[20][0]->display();
-	}
+//	void displayVol() { // for testing
+//		volumes[20][0]->display();
+//	}
 
 private:
 	cv::Mat readFrame();
@@ -32,8 +32,8 @@ private:
 	void rotateFrames();
 
 	void constructVolumes();
-	std::shared_ptr<Volume> constructVolume(unsigned x, unsigned y);
-	std::shared_ptr<Block> findNextBlock(const cv::Mat& frame, std::shared_ptr<Block> ref, int vx, int vy);
+	void constructVolume(unsigned x, unsigned y);
+	std::pair<unsigned, unsigned> findNextBlock(const cv::Mat& frame, const cv::Mat& nextFrame, unsigned refx, unsigned refy, int vx, int vy);
 
 	cv::VideoCapture& video;
 	const BmSettings& settings;
@@ -44,5 +44,5 @@ private:
 	unsigned frameWidth;
 	unsigned frameHeight;
 	
-	std::vector<std::vector<std::shared_ptr<Volume>>> volumes;
+	std::vector<std::vector<std::vector<std::pair<unsigned, unsigned>>>> indexSets;
 };
