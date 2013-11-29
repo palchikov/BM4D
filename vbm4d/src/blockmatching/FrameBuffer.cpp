@@ -154,7 +154,7 @@ std::pair<unsigned, unsigned> FrameBuffer::findNextBlock(const cv::Mat& frame, c
 
 void FrameBuffer::rotateFrames()
 {
-	if (frameBuffer.size() == 2 * settings.getExtent() + 1) {
+	if (curFrameIndex >= settings.getExtent()) {
 		frameBuffer.pop_front();
 	} else {
 		++curFrameIndex;
